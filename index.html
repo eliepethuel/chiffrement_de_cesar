@@ -39,11 +39,12 @@
       </div>
 
       <div class="hero__side" data-reveal style="--d:2">
-        <p class="lead">Chaque lettre avance de quelques rangs dans l'alphabet. Choisissez une clé, écrivez&nbsp;: le message se transforme sous vos yeux.</p>
+        <p class="lead">Chaque lettre avance de quelques rangs dans son alphabet — latin, cyrillique, arabe, chinois et bien d'autres. Choisissez une clé, écrivez&nbsp;: le message se transforme sous vos yeux.</p>
         <dl class="specs">
           <div><dt>Opérateur</dt><dd class="tone">IM_ME</dd></div>
           <div><dt>Algorithme</dt><dd>Substitution par décalage</dd></div>
           <div><dt>Clé active</dt><dd><span data-k>3</span> / 25</dd></div>
+          <div><dt>Alphabets</dt><dd><span id="alphabetCount">43</span> pris en charge</dd></div>
           <div><dt>Origine</dt><dd>Rome, Iᵉʳ s. av.&nbsp;J.-C.</dd></div>
         </dl>
       </div>
@@ -79,7 +80,20 @@
             <span class="field__meta" id="count">0 caractère</span>
           </div>
           <textarea id="input" rows="4" spellcheck="false" autocomplete="off"
-            placeholder="Écrivez votre message…">Veni, vidi, vici.</textarea>
+            placeholder="Écrivez votre message…" dir="auto">Veni, vidi, vici.</textarea>
+          <div class="samples" role="group" aria-label="Exemples dans d'autres langues">
+            <span class="samples__label">Essayer</span>
+            <button class="chip" type="button" lang="fr" data-sample="Le sort en est jeté.">Français</button>
+            <button class="chip" type="button" lang="en" data-sample="The die is cast.">English</button>
+            <button class="chip" type="button" lang="ru" data-sample="Жребий брошен.">Русский</button>
+            <button class="chip" type="button" lang="el" data-sample="Ο κύβος ερρίφθη.">Ελληνικά</button>
+            <button class="chip" type="button" lang="ar" data-sample="قضي الأمر">العربية</button>
+            <button class="chip" type="button" lang="he" data-sample="הפור נפל">עברית</button>
+            <button class="chip" type="button" lang="hi" data-sample="पासा फेंका जा चुका है">हिन्दी</button>
+            <button class="chip" type="button" lang="zh" data-sample="骰子已经掷出">中文</button>
+            <button class="chip" type="button" lang="ja" data-sample="賽は投げられた">日本語</button>
+            <button class="chip" type="button" lang="ko" data-sample="주사위는 던져졌다">한국어</button>
+          </div>
         </div>
 
         <div class="bridge">
@@ -97,7 +111,8 @@
             <span class="field__meta">clé <b class="tone" data-k>3</b></span>
           </div>
           <output class="result" id="output" for="input" aria-labelledby="outputLabel"
-            data-placeholder="Le résultat apparaîtra ici."></output>
+            data-placeholder="Le résultat apparaîtra ici." dir="auto"></output>
+          <p class="scripts" id="scripts" aria-live="polite" aria-label="Alphabets détectés"></p>
         </div>
 
         <div class="actions">
@@ -106,7 +121,7 @@
             <span id="copyLabel">Copier le résultat</span>
           </button>
           <button class="btn" id="clearBtn" type="button">Effacer</button>
-          <p class="note">Les accents sont retirés avant le décalage&nbsp;; chiffres et ponctuation restent intacts.</p>
+          <p class="note">Chaque lettre est décalée dans son propre alphabet. Les accents latins et grecs sont retirés&nbsp;; chiffres et ponctuation restent intacts.</p>
         </div>
       </section>
 
@@ -174,7 +189,7 @@
         <header class="card__head">
           <span class="card__idx">04</span>
           <h2 id="mapTitle">Correspondance</h2>
-          <span class="card__tag">clair → chiffré</span>
+          <span class="card__tag" id="mapTag">clair → chiffré</span>
         </header>
 
         <div class="strip" id="strip" role="img" aria-label="Table de correspondance entre l'alphabet clair et l'alphabet chiffré"></div>

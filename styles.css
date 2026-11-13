@@ -290,6 +290,18 @@ textarea {
 }
 textarea::placeholder { color: color-mix(in srgb, var(--muted) 65%, transparent); }
 
+.samples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 14px; }
+.samples__label { font: 500 11px/1 var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-right: 6px; }
+.samples .chip { min-height: 32px; padding: 0 12px; font-family: var(--font-ui); font-size: 13px; }
+
+.scripts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.tag {
+  padding: 5px 10px; border: 1px solid color-mix(in srgb, var(--tone) 35%, transparent); border-radius: 999px;
+  font: 500 11px/1.3 var(--font-mono); letter-spacing: .04em; color: var(--muted);
+}
+.tag b { color: var(--tone); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.tag--warn { border-color: color-mix(in srgb, var(--amber) 50%, transparent); color: var(--amber); }
+
 .field--out {
   flex: 1;
   background: color-mix(in srgb, var(--tone) 6%, transparent);

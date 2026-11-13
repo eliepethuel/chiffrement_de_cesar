@@ -10,18 +10,101 @@
   const N = ALPHABET.length;
   const mod = (n, m = N) => ((n % m) + m) % m;
 
-  /** Retire les accents et développe les ligatures : « Œuvre » → « OEuvre ». */
+  /** Retire les accents latins et grecs et développe les ligatures : « Œuvre » → « OEuvre ».
+      Les autres écritures ne sont pas touchées (le « й » russe ou le coréen y perdraient des lettres). */
+  const MARKS = /[̀-ͯ]/g;
   const normalize = (text) => text
     .replace(/œ/g, 'oe').replace(/Œ/g, 'OE')
     .replace(/æ/g, 'ae').replace(/Æ/g, 'AE')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '');
+    .replace(/[\p{Script=Latin}\p{Script=Greek}][̀-ͯ]*/gu, (m) => m.normalize('NFD').replace(MARKS, ''));
 
-  /** Décale chaque lettre de `k` rangs ; casse, chiffres et ponctuation conservés. */
-  const shiftText = (text, k) => normalize(text).replace(/[a-z]/gi, (ch) => {
+  /* Alphabets. Le principe de César est le même partout : chaque lettre avance de k rangs
+     dans SON alphabet, modulo la taille de celui-ci. Trois sources, par ordre de priorité :
+     1. des alphabets écrits à la main (ordre usuel de la langue) ;
+     2. des blocs Unicode, dont on garde les lettres, séparées par casse ;
+     3. deux très grandes plages continues (chinois, coréen). */
+  const EXPLICIT = [
+    ['Latin', ALPHABET, ALPHABET.toLowerCase()],
+    ['Cyrillique', 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ', 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'],
+    ['Grec', 'ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ', 'αβγδεζηθικλμνξοπρστυφχψω'],
+    ['Arabe', 'ابتثجحخدذرزسشصضطظعغفقكلمنهوي'],
+    ['Hébreu', 'אבגדהוזחטיךכלםמןנסעףפץצקרשת'],
+  ];
+  const BLOCKS = [
+    ['Latin étendu', 0x00C0, 0x024F], ['Grec étendu', 0x0370, 0x03FF], ['Cyrillique étendu', 0x0400, 0x052F],
+    ['Arménien', 0x0530, 0x058F], ['Hébreu étendu', 0x0590, 0x05FF], ['Arabe étendu', 0x0600, 0x06FF],
+    ['Syriaque', 0x0700, 0x074F], ['Thâna', 0x0780, 0x07BF], ['N’ko', 0x07C0, 0x07FF],
+    ['Devanagari', 0x0900, 0x097F], ['Bengali', 0x0980, 0x09FF], ['Gurmukhi', 0x0A00, 0x0A7F],
+    ['Gujarati', 0x0A80, 0x0AFF], ['Odia', 0x0B00, 0x0B7F], ['Tamoul', 0x0B80, 0x0BFF],
+    ['Télougou', 0x0C00, 0x0C7F], ['Kannada', 0x0C80, 0x0CFF], ['Malayalam', 0x0D00, 0x0D7F],
+    ['Cinghalais', 0x0D80, 0x0DFF], ['Thaï', 0x0E00, 0x0E7F], ['Lao', 0x0E80, 0x0EFF],
+    ['Tibétain', 0x0F00, 0x0FFF], ['Birman', 0x1000, 0x109F], ['Géorgien', 0x10A0, 0x10FF],
+    ['Jamo coréen', 0x1100, 0x11FF], ['Éthiopien', 0x1200, 0x139F], ['Cherokee', 0x13A0, 0x13FF],
+    ['Syllabaire autochtone canadien', 0x1400, 0x167F], ['Khmer', 0x1780, 0x17FF], ['Mongol', 0x1800, 0x18AF],
+    ['Tifinagh', 0x2D30, 0x2D7F], ['Hiragana', 0x3040, 0x309F], ['Katakana', 0x30A0, 0x30FF],
+    ['Bopomofo', 0x3100, 0x312F], ['Yi', 0xA000, 0xA48F], ['Vaï', 0xA500, 0xA63F],
+  ];
+  const RANGES = [
+    { name: 'Chinois (sinogrammes)', start: 0x4E00, size: 20992 },
+    { name: 'Coréen (hangul)', start: 0xAC00, size: 11172 },
+  ];
+
+  const ALPHABET_NAMES = new Set(RANGES.map((range) => range.name));
+  const INDEX = new Map(); // lettre → [alphabet, position]
+  const addAlphabet = (name, chars) => {
+    const alphabet = { name, size: chars.length, chars };
+    chars.forEach((ch, position) => INDEX.set(ch, [alphabet, position]));
+    ALPHABET_NAMES.add(name);
+  };
+  for (const [name, ...cases] of EXPLICIT) cases.forEach((letters) => addAlphabet(name, [...letters]));
+  {
+    const CASES = [/\p{Lu}/u, /\p{Ll}/u, /\p{L}/u]; // majuscules, minuscules, écritures sans casse
+    for (const [name, start, end] of BLOCKS) {
+      const groups = [[], [], []];
+      for (let code = start; code <= end; code++) {
+        const ch = String.fromCharCode(code);
+        // On écarte les lettres déjà classées et celles que `normalize` transforme
+        // (sinon le déchiffrement ne retomberait pas sur la lettre de départ).
+        if (INDEX.has(ch) || normalize(ch) !== ch) continue;
+        const group = CASES.findIndex((test) => test.test(ch));
+        if (group >= 0) groups[group].push(ch);
+      }
+      groups.forEach((chars) => { if (chars.length > 1) addAlphabet(name, chars); });
+    }
+  }
+
+  /** Alphabet et position d'une lettre, ou null si son écriture n'est pas prise en charge. */
+  const locate = (ch) => {
+    const hit = INDEX.get(ch);
+    if (hit) return hit;
     const code = ch.charCodeAt(0);
-    const base = code < 97 ? 65 : 97;
-    return String.fromCharCode(base + mod(code - base + k));
-  });
+    const range = ch.length === 1 && RANGES.find((r) => code >= r.start && code < r.start + r.size);
+    return range ? [range, code - range.start] : null;
+  };
+
+  const shiftChar = (ch, k) => {
+    const hit = locate(ch);
+    if (!hit) return ch;
+    const [alphabet, position] = hit;
+    const next = mod(position + k, alphabet.size);
+    return alphabet.chars ? alphabet.chars[next] : String.fromCharCode(alphabet.start + next);
+  };
+
+  /** Décale chaque lettre de `k` rangs dans son alphabet ; chiffres et ponctuation conservés. */
+  const shiftText = (text, k) => normalize(text).replace(/\p{L}/gu, (ch) => shiftChar(ch, k));
+
+  /** Alphabets rencontrés dans un texte (nom → taille) et lettres laissées intactes. */
+  function analyze(text) {
+    const found = new Map();
+    let letters = 0;
+    let unsupported = 0;
+    for (const ch of normalize(text).match(/\p{L}/gu) || []) {
+      letters++;
+      const hit = locate(ch);
+      if (hit) found.set(hit[0].name, hit[0].size); else unsupported++;
+    }
+    return { found, letters, unsupported };
+  }
 
   /* Table ASCII : noms des 32 caractères de contrôle, puis familles. */
   const CONTROL = ['NUL', 'SOH', 'STX', 'ETX', 'EOT', 'ENQ', 'ACK', 'BEL', 'BS', 'HT', 'LF', 'VT', 'FF', 'CR', 'SO', 'SI',
@@ -54,8 +137,9 @@
     wheel: $('wheel'), range: $('range'), strip: $('strip'),
     copyBtn: $('copyBtn'), copyLabel: $('copyLabel'), title: $('title'),
     promptMode: $('promptMode'), sigArt: $('sigArt'), sigCaesar: $('sigCaesar'),
-    ascii: $('ascii'), brandName: $('brandName'),
+    ascii: $('ascii'), brandName: $('brandName'), scripts: $('scripts'),
   };
+  $('alphabetCount').textContent = ALPHABET_NAMES.size;
 
   const store = {
     get(key) { try { return localStorage.getItem(key); } catch { return null; } },
@@ -178,7 +262,7 @@
     const changed = [];
     if (!reduceMotion.matches && target.length <= 800) {
       for (let i = 0; i < target.length; i++) {
-        if (target[i] !== previous[i] && /[a-z]/i.test(target[i])) changed.push(i);
+        if (target[i] !== previous[i] && locate(target[i])) changed.push(i);
       }
     }
     // Le texte exact est posé tout de suite : si l'onglet est en arrière-plan
@@ -197,8 +281,8 @@
       changed.forEach((index, n) => {
         if (elapsed >= revealAt[n]) return;
         pending = true;
-        const random = ALPHABET[(Math.random() * N) | 0];
-        chars[index] = target[index] === target[index].toUpperCase() ? random : random.toLowerCase();
+        // Le brouillage pioche dans l'alphabet de la lettre : du russe reste du russe.
+        chars[index] = shiftChar(target[index], 1 + ((Math.random() * 97) | 0));
       });
       node.textContent = chars.join('');
       if (pending) node._raf = requestAnimationFrame(frame);
@@ -220,10 +304,24 @@
     state.output = shiftText(raw, state.mode === 'encrypt' ? state.key : -state.key);
     scrambleTo(el.output, state.output, previous);
 
-    const letters = (normalize(raw).match(/[a-z]/gi) || []).length;
+    const { found, letters, unsupported } = analyze(raw);
     const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
-    el.count.textContent = `${plural(raw.length, 'caractère')} · ${plural(letters, 'lettre')}`;
+    el.count.textContent = `${plural(Array.from(raw).length, 'caractère')} · ${plural(letters, 'lettre')}`;
     el.copyBtn.disabled = !state.output;
+
+    // Alphabets détectés, avec leur taille (le décalage se fait modulo cette taille).
+    el.scripts.replaceChildren(...Array.from(found, ([name, size]) => {
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.innerHTML = `${name} <b>${size.toLocaleString('fr-FR')}</b>`;
+      return tag;
+    }));
+    if (unsupported) {
+      const tag = document.createElement('span');
+      tag.className = 'tag tag--warn';
+      tag.textContent = `${plural(unsupported, 'lettre')} hors alphabets connus, laissée${unsupported > 1 ? 's' : ''} telle${unsupported > 1 ? 's' : ''} quelle${unsupported > 1 ? 's' : ''}`;
+      el.scripts.append(tag);
+    }
 
     // Table ASCII : repère les codes présents dans le message et dans le résultat.
     const codesOf = (text) => new Set(Array.from(text, (ch) => ch.charCodeAt(0)));
@@ -250,18 +348,32 @@
     $('insBin').textContent = `${bin.slice(0, 4)} ${bin.slice(4)}`;
     $('insKind').textContent = code === 32 ? 'Espace' : KIND_LABEL[kind];
     $('insCaesar').textContent = kind === 'upper' || kind === 'lower'
-      ? `${label} → ${shiftText(label, state.key)}`
+      ? `${label} → ${shiftText(label, shift())}`
       : 'inchangé';
 
     asciiCells.forEach((cell, index) => cell.classList.toggle('is-sel', index === code));
   }
 
+  /** Décalage réellement appliqué : +clé pour chiffrer, −clé pour déchiffrer. */
+  const shift = () => (state.mode === 'encrypt' ? state.key : -state.key);
+
+  /* La roue et la table montrent toujours « lettre saisie → lettre obtenue » :
+     en déchiffrement, l'anneau intérieur tourne donc dans l'autre sens. */
+  let shownShift = 0;
+  function syncRing() {
+    const s = shift();
+    rotation -= (mod(s - shownShift + 13) - 13) * STEP; // plus court chemin, jamais plus d'un demi-tour
+    shownShift = s;
+    ring.style.transform = `rotate(${rotation}deg)`;
+  }
+
   function renderKey({ animate = true } = {}) {
     const k = state.key;
-    const target = ALPHABET[k];
+    const s = shift();
+    const target = ALPHABET[mod(s)];
 
-    ring.style.transform = `rotate(${rotation}deg)`;
-    cipherLetters.forEach((letter, i) => letter.classList.toggle('is-top', i === k));
+    syncRing();
+    cipherLetters.forEach((letter, i) => letter.classList.toggle('is-top', i === mod(s)));
     el.wheel.setAttribute('aria-valuenow', k);
     el.wheel.setAttribute('aria-valuetext', `Clé ${k} : A devient ${target}`);
 
@@ -270,7 +382,7 @@
 
     document.querySelectorAll('[data-k]').forEach((node) => { node.textContent = k; });
     el.pairTo.textContent = target;
-    el.readoutText.textContent = `décalage de ${k} lettre${k > 1 ? 's' : ''}`;
+    el.readoutText.textContent = `${state.mode === 'encrypt' ? 'avance' : 'recul'} de ${k} lettre${k > 1 ? 's' : ''}`;
     el.sigCaesar.textContent = shiftText(NICKNAME, k);
     document.querySelectorAll('.chip[data-key]').forEach((chip) => {
       chip.setAttribute('aria-pressed', String(Number(chip.dataset.key) === k));
@@ -278,7 +390,7 @@
 
     cells.forEach((cell, i) => {
       const cipher = cell.lastElementChild;
-      cipher.textContent = ALPHABET[mod(i + k)];
+      cipher.textContent = ALPHABET[mod(i + s)];
       if (animate && !reduceMotion.matches) {
         cipher.animate(
           [{ transform: 'translateY(60%)', opacity: 0 }, { transform: 'none', opacity: 1 }],
@@ -291,14 +403,16 @@
     if (animate) { pop(el.hubNum); pop(el.pairTo); pop(el.sigCaesar); }
   }
 
-  function renderMode() {
+  function renderMode({ animate = true } = {}) {
     const copy = COPY[state.mode];
     root.dataset.mode = state.mode;
     el.inputLabel.textContent = copy.input;
     el.outputLabel.textContent = copy.output;
     el.input.placeholder = copy.placeholder;
     el.promptMode.textContent = copy.verb;
+    $('mapTag').textContent = state.mode === 'encrypt' ? 'clair → chiffré' : 'chiffré → clair';
     document.querySelector(`input[name="mode"][value="${state.mode}"]`).checked = true;
+    renderKey({ animate });
   }
 
   /* 5. Interactions ------------------------------------------------------- */
@@ -306,9 +420,6 @@
   function setKey(next, options) {
     const k = mod(next - 1, 25) + 1; // toujours entre 1 et 25
     if (k === state.key) return;
-    // Plus court chemin sur la roue : jamais plus d'un demi-tour.
-    const delta = mod(k - state.key + 13) - 13;
-    rotation -= delta * STEP;
     state.key = k;
     store.set('cesar:key', k);
     renderKey(options);
@@ -326,8 +437,7 @@
   function flash(char) {
     const typed = ALPHABET.indexOf(normalize(char).toUpperCase()[0]);
     if (typed < 0) return;
-    const plain = state.mode === 'encrypt' ? typed : mod(typed - state.key);
-    const targets = [plainLetters[plain], cipherLetters[mod(plain + state.key)], cells[plain]];
+    const targets = [plainLetters[typed], cipherLetters[mod(typed + shift())], cells[typed]];
     targets.forEach((node) => {
       node.classList.add('is-hit');
       clearTimeout(node._hit);
@@ -386,7 +496,8 @@
       travelled += mod(angle - lastAngle + 180, 360) - 180;
       lastAngle = angle;
       // Tourner dans le sens horaire fait reculer l'alphabet chiffré : la clé diminue.
-      const k = mod(startKey - Math.round(travelled / STEP));
+      const direction = state.mode === 'encrypt' ? 1 : -1; // l'anneau tourne à l'envers en déchiffrement
+      const k = mod(startKey - direction * Math.round(travelled / STEP));
       if (k !== 0) setKey(k);
     });
     const release = () => { dragging = false; };
@@ -407,6 +518,15 @@
     state.mode = state.mode === 'encrypt' ? 'decrypt' : 'encrypt';
     renderMode();
     renderText();
+  });
+
+  // Exemples : « Le sort en est jeté » dans plusieurs langues.
+  document.querySelectorAll('.chip[data-sample]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      el.input.value = chip.dataset.sample;
+      if (state.mode !== 'encrypt') { state.mode = 'encrypt'; renderMode(); }
+      renderText();
+    });
   });
 
   $('clearBtn').addEventListener('click', () => {
@@ -576,9 +696,7 @@
   buildStrip();
   buildAscii();
   drawSignature({ animate: false });
-  rotation = -state.key * STEP;
-  renderMode();
-  renderKey({ animate: false });
+  renderMode({ animate: false });
   renderText();
   observeCards();
   decodeTitle();
