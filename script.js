@@ -1,5 +1,6 @@
-/* César — chiffrement par décalage.
-   Organisation : 1. Chiffre (fonctions pures)  2. État  3. Rendu  4. Interactions */
+/* César — chiffrement par décalage · IM_ME
+   1. Chiffre (fonctions pures)   2. État   3. Construction
+   4. Rendu   5. Interactions     6. Effets  7. Démarrage */
 (() => {
   'use strict';
 
@@ -22,47 +23,38 @@
     return String.fromCharCode(base + mod(code - base + k));
   });
 
-  // Fréquence des lettres en français (%), de A à Z.
-  const FR_FREQ = [7.636, 0.901, 3.26, 3.669, 14.715, 1.066, 0.866, 0.737, 7.529, 0.613, 0.074, 5.456, 2.968,
-    7.095, 5.796, 2.521, 1.362, 6.693, 7.948, 7.244, 6.311, 1.838, 0.049, 0.427, 0.128, 0.326];
+  /* Table ASCII : noms des 32 caractères de contrôle, puis familles. */
+  const CONTROL = ['NUL', 'SOH', 'STX', 'ETX', 'EOT', 'ENQ', 'ACK', 'BEL', 'BS', 'HT', 'LF', 'VT', 'FF', 'CR', 'SO', 'SI',
+    'DLE', 'DC1', 'DC2', 'DC3', 'DC4', 'NAK', 'SYN', 'ETB', 'CAN', 'EM', 'SUB', 'ESC', 'FS', 'GS', 'RS', 'US'];
 
-  /** Clé la plus vraisemblable d'un texte chiffré (test du χ²), ou null s'il est trop court. */
-  function guessKey(cipher) {
-    const counts = new Array(N).fill(0);
-    let total = 0;
-    for (const ch of cipher.toUpperCase()) {
-      const i = ch.charCodeAt(0) - 65;
-      if (i >= 0 && i < N) { counts[i]++; total++; }
-    }
-    if (total < 6) return null;
-
-    let best = null;
-    let bestScore = Infinity;
-    for (let k = 1; k < N; k++) {
-      let chi = 0;
-      for (let i = 0; i < N; i++) {
-        const expected = (FR_FREQ[i] / 100) * total;
-        const diff = counts[mod(i + k)] - expected;
-        chi += (diff * diff) / expected;
-      }
-      if (chi < bestScore) { bestScore = chi; best = k; }
-    }
-    return best;
-  }
+  const asciiLabel = (code) => (code < 32 ? CONTROL[code] : code === 32 ? 'SP' : code === 127 ? 'DEL' : String.fromCharCode(code));
+  const asciiKind = (code) => {
+    if (code < 32 || code === 127) return 'ctrl';
+    if (code >= 48 && code <= 57) return 'digit';
+    if (code >= 65 && code <= 90) return 'upper';
+    if (code >= 97 && code <= 122) return 'lower';
+    return 'symbol';
+  };
+  const KIND_LABEL = {
+    ctrl: 'Caractère de contrôle', digit: 'Chiffre', upper: 'Lettre majuscule',
+    lower: 'Lettre minuscule', symbol: 'Symbole ou ponctuation',
+  };
 
   /* 2. État --------------------------------------------------------------- */
 
   const $ = (id) => document.getElementById(id);
   const root = document.documentElement;
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  root.classList.add('js');
 
   const el = {
     input: $('input'), output: $('output'), count: $('count'),
     inputLabel: $('inputLabel'), outputLabel: $('outputLabel'),
-    keyChip: $('keyChip'), hubNum: $('hubNum'), pairTo: $('pairTo'), readoutText: $('readoutText'),
+    hubNum: $('hubNum'), pairTo: $('pairTo'), readoutText: $('readoutText'),
     wheel: $('wheel'), range: $('range'), strip: $('strip'),
-    crack: $('crack'), crackEmpty: $('crackEmpty'),
     copyBtn: $('copyBtn'), copyLabel: $('copyLabel'), title: $('title'),
+    promptMode: $('promptMode'), sigArt: $('sigArt'), sigCaesar: $('sigCaesar'),
+    ascii: $('ascii'), brandName: $('brandName'),
   };
 
   const store = {
@@ -75,14 +67,26 @@
     mode: 'encrypt',
     key: savedKey >= 1 && savedKey <= 25 ? savedKey : 3,
     output: '',
+    inspected: 65, // code ASCII affiché dans l'inspecteur
   };
 
   const COPY = {
-    encrypt: { input: 'Message clair', output: 'Message chiffré', placeholder: 'Écrivez votre message…' },
-    decrypt: { input: 'Message chiffré', output: 'Message clair', placeholder: 'Collez le message à déchiffrer…' },
+    encrypt: { input: 'Message clair', output: 'Message chiffré', placeholder: 'Écrivez votre message…', verb: 'chiffrer' },
+    decrypt: { input: 'Message chiffré', output: 'Message clair', placeholder: 'Collez le message à déchiffrer…', verb: 'dechiffrer' },
   };
 
-  /* 3. Rendu -------------------------------------------------------------- */
+  const NICKNAME = 'IM_ME';
+  // « IM_ME » en caractères blocs (police ANSI Shadow).
+  const SIGNATURE = [
+    '██╗███╗   ███╗        ███╗   ███╗███████╗',
+    '██║████╗ ████║        ████╗ ████║██╔════╝',
+    '██║██╔████╔██║        ██╔████╔██║█████╗  ',
+    '██║██║╚██╔╝██║        ██║╚██╔╝██║██╔══╝  ',
+    '██║██║ ╚═╝ ██║███████╗██║ ╚═╝ ██║███████╗',
+    '╚═╝╚═╝     ╚═╝╚══════╝╚═╝     ╚═╝╚══════╝',
+  ];
+
+  /* 3. Construction ------------------------------------------------------- */
 
   const STEP = 360 / N;
   const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -96,8 +100,8 @@
   let rotation = 0;         // rotation cumulée, pour toujours tourner par le plus court chemin
   const plainLetters = [];  // <text> de l'anneau extérieur
   const cipherLetters = []; // <text> de l'anneau intérieur
-  const cells = [];         // cellules de la table
-  const rows = [];          // lignes de l'analyse
+  const cells = [];         // cellules de la table de correspondance
+  const asciiCells = [];    // 128 cellules de la table ASCII
 
   function buildWheel() {
     const ringOf = (cls, radius, list) => {
@@ -145,19 +149,28 @@
     }
   }
 
-  function buildCrack() {
-    for (let k = 1; k < N; k++) {
-      const item = document.createElement('li');
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'row';
-      row.dataset.key = k;
-      row.innerHTML = `<span class="row__k">${String(k).padStart(2, '0')}</span><span class="row__t"></span><span class="row__b"></span>`;
-      rows.push(row);
-      item.append(row);
-      el.crack.append(item);
+  function buildAscii() {
+    for (let code = 0; code < 128; code++) {
+      const cell = document.createElement('button');
+      const hex = code.toString(16).toUpperCase().padStart(2, '0');
+      cell.type = 'button';
+      cell.className = 'ac';
+      cell.dataset.code = code;
+      cell.dataset.kind = asciiKind(code);
+      cell.setAttribute('aria-label', `${asciiLabel(code)}, code ${code}, hexadécimal ${hex}`);
+
+      const glyph = document.createElement('b');
+      glyph.textContent = asciiLabel(code); // textContent : « < » et « & » restent du texte
+      const codes = document.createElement('small');
+      codes.innerHTML = `<span>${code}</span><i>${hex}</i>`;
+
+      cell.append(glyph, codes);
+      asciiCells.push(cell);
+      el.ascii.append(cell);
     }
   }
+
+  /* 4. Rendu -------------------------------------------------------------- */
 
   /** Révèle `target` en brouillant brièvement les seules lettres qui ont changé. */
   function scrambleTo(node, target, previous) {
@@ -212,29 +225,35 @@
     el.count.textContent = `${plural(raw.length, 'caractère')} · ${plural(letters, 'lettre')}`;
     el.copyBtn.disabled = !state.output;
 
-    renderCrack();
+    // Table ASCII : repère les codes présents dans le message et dans le résultat.
+    const codesOf = (text) => new Set(Array.from(text, (ch) => ch.charCodeAt(0)));
+    const source = codesOf(normalize(raw));
+    const result = codesOf(state.output);
+    asciiCells.forEach((cell, code) => {
+      cell.classList.toggle('in-src', source.has(code));
+      cell.classList.toggle('in-out', result.has(code));
+    });
   }
 
-  function renderCrack() {
-    // L'analyse porte toujours sur le texte chiffré, quel que soit le mode.
-    const cipher = state.mode === 'encrypt' ? state.output : normalize(el.input.value);
-    const hasText = /[a-z]/i.test(cipher);
-    el.crackEmpty.hidden = hasText;
-    el.crack.hidden = !hasText;
-    if (!hasText) return;
+  function renderInspector() {
+    const code = state.inspected;
+    const kind = asciiKind(code);
+    const label = asciiLabel(code);
+    const bin = code.toString(2).padStart(8, '0');
 
-    const best = guessKey(cipher.slice(0, 4000));
-    const excerpt = cipher.slice(0, 140).replace(/\s+/g, ' ');
-    rows.forEach((row, index) => {
-      const k = index + 1;
-      const isBest = k === best;
-      const isCurrent = k === state.key;
-      row.children[1].textContent = shiftText(excerpt, -k);
-      row.children[2].textContent = isBest ? 'probable' : isCurrent ? 'clé actuelle' : '';
-      row.classList.toggle('is-best', isBest);
-      row.classList.toggle('is-current', isCurrent);
-      row.setAttribute('aria-label', `Clé ${k}${isBest ? ', la plus probable' : ''} : ${row.children[1].textContent}`);
-    });
+    const glyph = $('insGlyph');
+    glyph.textContent = label;
+    glyph.classList.toggle('is-small', label.length > 1);
+    $('insDec').textContent = code;
+    $('insHex').textContent = `0x${code.toString(16).toUpperCase().padStart(2, '0')}`;
+    $('insOct').textContent = code.toString(8).padStart(3, '0');
+    $('insBin').textContent = `${bin.slice(0, 4)} ${bin.slice(4)}`;
+    $('insKind').textContent = code === 32 ? 'Espace' : KIND_LABEL[kind];
+    $('insCaesar').textContent = kind === 'upper' || kind === 'lower'
+      ? `${label} → ${shiftText(label, state.key)}`
+      : 'inchangé';
+
+    asciiCells.forEach((cell, index) => cell.classList.toggle('is-sel', index === code));
   }
 
   function renderKey({ animate = true } = {}) {
@@ -249,10 +268,10 @@
     el.range.value = k;
     el.range.style.setProperty('--pct', `${((k - 1) / 24) * 100}%`);
 
-    for (const node of [el.hubNum, el.keyChip]) node.textContent = k;
+    document.querySelectorAll('[data-k]').forEach((node) => { node.textContent = k; });
     el.pairTo.textContent = target;
     el.readoutText.textContent = `décalage de ${k} lettre${k > 1 ? 's' : ''}`;
-    document.querySelectorAll('.formula .k').forEach((node) => { node.textContent = k; });
+    el.sigCaesar.textContent = shiftText(NICKNAME, k);
     document.querySelectorAll('.chip[data-key]').forEach((chip) => {
       chip.setAttribute('aria-pressed', String(Number(chip.dataset.key) === k));
     });
@@ -268,7 +287,8 @@
       }
     });
 
-    if (animate) { pop(el.hubNum); pop(el.pairTo); }
+    renderInspector();
+    if (animate) { pop(el.hubNum); pop(el.pairTo); pop(el.sigCaesar); }
   }
 
   function renderMode() {
@@ -277,10 +297,11 @@
     el.inputLabel.textContent = copy.input;
     el.outputLabel.textContent = copy.output;
     el.input.placeholder = copy.placeholder;
+    el.promptMode.textContent = copy.verb;
     document.querySelector(`input[name="mode"][value="${state.mode}"]`).checked = true;
   }
 
-  /* 4. Interactions ------------------------------------------------------- */
+  /* 5. Interactions ------------------------------------------------------- */
 
   function setKey(next, options) {
     const k = mod(next - 1, 25) + 1; // toujours entre 1 et 25
@@ -316,7 +337,12 @@
 
   el.input.addEventListener('input', (event) => {
     renderText();
-    if (event.data && event.data.length === 1) flash(event.data);
+    if (event.data && event.data.length === 1) {
+      flash(event.data);
+      // L'inspecteur ASCII suit le dernier caractère tapé.
+      const code = normalize(event.data).charCodeAt(0);
+      if (code < 128) { state.inspected = code; renderInspector(); }
+    }
   });
 
   document.querySelectorAll('input[name="mode"]').forEach((radio) => {
@@ -389,20 +415,29 @@
     el.input.focus();
   });
 
-  // Analyse : choisir une ligne applique ce déchiffrement.
-  el.crack.addEventListener('click', (event) => {
-    const row = event.target.closest('.row');
-    if (!row) return;
-    if (state.mode === 'encrypt') {
-      el.input.value = state.output;
-      state.output = '';
-      state.mode = 'decrypt';
-      renderMode();
-    }
-    const k = Number(row.dataset.key);
-    if (k === state.key) renderText(); else setKey(k);
-    $('atelier').scrollIntoView({ behavior: reduceMotion.matches ? 'auto' : 'smooth', block: 'center' });
-  });
+  // Table ASCII : survol, focus ou clic d'une cellule → inspecteur.
+  {
+    const inspect = (event) => {
+      const cell = event.target.closest('.ac');
+      if (!cell) return;
+      state.inspected = Number(cell.dataset.code);
+      renderInspector();
+    };
+    el.ascii.addEventListener('pointerover', inspect);
+    el.ascii.addEventListener('focusin', inspect);
+    el.ascii.addEventListener('click', inspect);
+
+    const filters = document.querySelectorAll('.chip[data-filter]');
+    filters.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const filter = chip.dataset.filter;
+        filters.forEach((other) => other.setAttribute('aria-pressed', String(other === chip)));
+        asciiCells.forEach((cell) => {
+          cell.classList.toggle('is-dim', filter !== 'all' && cell.dataset.kind !== filter);
+        });
+      });
+    });
+  }
 
   // Copie, avec repli pour les contextes sans API Clipboard (file://, anciens navigateurs).
   async function copyText(text) {
@@ -435,34 +470,32 @@
     }, 1600);
   });
 
-  $('themeBtn').addEventListener('click', () => {
-    const theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
-    root.dataset.theme = theme;
-    store.set('cesar:theme', theme);
-    document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#0e0d0b' : '#f3ecdf';
-  });
+  /* 6. Effets ------------------------------------------------------------- */
 
-  /** Le titre arrive chiffré puis se déchiffre lettre à lettre. */
+  const HACK_GLYPHS = '01#$%&@<>/\\[]{}=+*?!';
+  const BLOCK_GLYPHS = '░▒▓█';
+  const pick = (glyphs) => glyphs[(Math.random() * glyphs.length) | 0];
+
+  /** Le titre arrive en caractères brouillés puis se résout de gauche à droite. */
   function decodeTitle() {
     if (reduceMotion.matches) return;
     const walker = document.createTreeWalker(el.title, NodeFilter.SHOW_TEXT);
     const nodes = [];
     while (walker.nextNode()) {
-      if (walker.currentNode.nodeValue.trim()) nodes.push({ node: walker.currentNode, text: walker.currentNode.nodeValue });
+      const node = walker.currentNode;
+      if (node.nodeValue.trim() && !node.parentElement.classList.contains('title__cursor')) {
+        nodes.push({ node, text: node.nodeValue });
+      }
     }
-    const lettersTotal = nodes.reduce((sum, { text }) => sum + text.length, 0);
-    const start = performance.now() + 350;
-    const duration = 1100;
+    const total = nodes.reduce((sum, { text }) => sum + text.length, 0);
+    const start = performance.now() + 300;
+    const duration = 1200;
 
     const frame = (now) => {
       const progress = (now - start) / duration;
       let offset = 0;
       for (const { node, text } of nodes) {
-        node.nodeValue = text.replace(/\p{L}/gu, (ch, index) => {
-          if ((offset + index) / lettersTotal < progress) return ch;
-          const random = ALPHABET[(Math.random() * N) | 0];
-          return ch === ch.toUpperCase() ? random : random.toLowerCase();
-        });
+        node.nodeValue = text.replace(/\p{L}/gu, (ch, index) => ((offset + index) / total < progress ? ch : pick(HACK_GLYPHS)));
         offset += text.length;
       }
       if (progress < 1) requestAnimationFrame(frame);
@@ -470,14 +503,84 @@
     requestAnimationFrame(frame);
   }
 
-  /* Démarrage ------------------------------------------------------------- */
+  /** Signature en blocs : balayage de gauche à droite depuis du bruit. */
+  function drawSignature({ animate = true } = {}) {
+    const final = SIGNATURE.join('\n');
+    el.sigArt.textContent = final;
+    if (!animate || reduceMotion.matches) return;
+
+    const width = SIGNATURE[0].length;
+    const start = performance.now();
+    const duration = 1100;
+    const frame = (now) => {
+      const progress = (now - start) / duration;
+      el.sigArt.textContent = SIGNATURE
+        .map((line) => Array.from(line, (ch, x) => (ch === ' ' || x / width < progress - Math.random() * 0.18 ? ch : pick(BLOCK_GLYPHS))).join(''))
+        .join('\n');
+      if (progress < 1.2) requestAnimationFrame(frame); else el.sigArt.textContent = final;
+    };
+    requestAnimationFrame(frame);
+  }
+
+  /** Pseudo dans l'en-tête : au survol, passe par du bruit et son écriture « leet ». */
+  function hackName(node) {
+    let timer;
+    const run = () => {
+      if (reduceMotion.matches) return;
+      clearInterval(timer);
+      let tick = 0;
+      timer = setInterval(() => {
+        tick++;
+        let text;
+        if (tick < 8) text = Array.from(NICKNAME, (ch) => (ch === '_' ? '_' : pick(HACK_GLYPHS))).join('');
+        else if (tick < 16) text = '1M_M3';
+        else { text = NICKNAME; clearInterval(timer); }
+        node.textContent = text;
+        node.dataset.text = text;
+      }, 55);
+    };
+    node.closest('a, p').addEventListener('pointerenter', run);
+    return run;
+  }
+
+  // Halo des cartes : suit le pointeur.
+  document.querySelectorAll('.card').forEach((card) => {
+    card.addEventListener('pointermove', (event) => {
+      const box = card.getBoundingClientRect();
+      card.style.setProperty('--mx', `${event.clientX - box.left}px`);
+      card.style.setProperty('--my', `${event.clientY - box.top}px`);
+    });
+  });
+
+  // Entrée des cartes au défilement ; la signature se dessine à son arrivée.
+  function observeCards() {
+    const cards = document.querySelectorAll('[data-in]');
+    const show = (card) => {
+      card.classList.add('is-in');
+      if (card.contains(el.sigArt)) drawSignature();
+    };
+    if (!('IntersectionObserver' in window)) { cards.forEach(show); return; }
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        show(entry.target);
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: 0.12 });
+    cards.forEach((card) => observer.observe(card));
+  }
+
+  /* 7. Démarrage ---------------------------------------------------------- */
 
   buildWheel();
   buildStrip();
-  buildCrack();
+  buildAscii();
+  drawSignature({ animate: false });
   rotation = -state.key * STEP;
   renderMode();
   renderKey({ animate: false });
   renderText();
+  observeCards();
   decodeTitle();
+  setTimeout(hackName(el.brandName), 900);
 })();

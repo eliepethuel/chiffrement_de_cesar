@@ -1,120 +1,129 @@
 <!doctype html>
-<html lang="fr" data-theme="dark" data-mode="encrypt">
+<html lang="fr" data-mode="encrypt">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>César — Chiffrement par décalage</title>
-  <meta name="description" content="Chiffrez et déchiffrez vos messages avec le chiffre de César : roue interactive, clé de 1 à 25 et analyse des 25 décalages.">
-  <meta name="theme-color" content="#0e0d0b">
-
-  <!-- Applique le thème enregistré avant le premier rendu (évite le flash). -->
-  <script>
-    try {
-      var t = localStorage.getItem('cesar:theme');
-      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
-    } catch (e) {}
-  </script>
+  <title>César — Chiffrement par décalage · IM_ME</title>
+  <meta name="description" content="Chiffrez et déchiffrez vos messages avec le chiffre de César : roue interactive, clé de 1 à 25 et table ASCII. Un projet d'IM_ME.">
+  <meta name="theme-color" content="#060808">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <a class="skip" href="#atelier">Aller à l'outil</a>
-  <div class="grain" aria-hidden="true"></div>
+  <div class="backdrop" aria-hidden="true"></div>
 
-  <header class="top" data-reveal style="--d:0">
-    <a class="brand" href="#" aria-label="César, accueil">
-      <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
-        <circle cx="16" cy="16" r="14.5" fill="none" stroke="currentColor" stroke-width="1"/>
-        <circle cx="16" cy="16" r="9.5" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="1.6 2.1"/>
-        <circle cx="16" cy="16" r="2.4" fill="var(--tone)"/>
-      </svg>
-      <span class="brand__name">César</span>
+  <header class="top">
+    <a class="brand" href="#" aria-label="IM_ME — chiffre de César, accueil">
+      <span class="glitch" id="brandName" data-text="IM_ME" aria-hidden="true">IM_ME</span>
+      <span class="brand__sep" aria-hidden="true">/</span>
+      <span class="brand__app" aria-hidden="true">cesar.exe</span>
     </a>
-
-    <button class="icon-btn" id="themeBtn" type="button" aria-label="Changer de thème" title="Changer de thème">
-      <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
-      <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
-    </button>
+    <p class="status"><span class="status__dot" aria-hidden="true"></span>Session locale · rien n'est envoyé</p>
   </header>
 
   <main>
-    <section class="stage">
-      <div class="stage__main">
-        <div class="intro">
-          <p class="eyebrow" data-reveal style="--d:1">Chiffrement par décalage <span aria-hidden="true">·</span> <span class="nowrap">Rome, Iᵉʳ siècle av.&nbsp;J.-C.</span></p>
-          <h1 class="title" id="title" aria-label="Le chiffre de César" data-reveal style="--d:2">
-            <span aria-hidden="true">Le chiffre</span>
-            <span aria-hidden="true">de <em>César</em></span>
-          </h1>
-          <p class="lead" data-reveal style="--d:3">
-            Chaque lettre avance de quelques rangs dans l'alphabet. Choisissez une clé, écrivez&nbsp;: le message se transforme sous vos yeux.
-          </p>
-        </div>
-
-        <div class="bench" id="atelier" data-reveal style="--d:4">
-          <div class="bench__bar">
-            <fieldset class="seg">
-              <legend class="sr-only">Mode</legend>
-              <span class="seg__pill" aria-hidden="true"></span>
-              <label class="seg__opt">
-                <input type="radio" name="mode" value="encrypt" checked>
-                <span>Chiffrer</span>
-              </label>
-              <label class="seg__opt">
-                <input type="radio" name="mode" value="decrypt">
-                <span>Déchiffrer</span>
-              </label>
-            </fieldset>
-            <p class="keychip" aria-hidden="true">Clé <b id="keyChip">3</b></p>
-          </div>
-
-          <div class="field">
-            <div class="field__head">
-              <label class="field__label" for="input" id="inputLabel">Message clair</label>
-              <span class="field__meta" id="count">0 caractère</span>
-            </div>
-            <textarea id="input" rows="4" spellcheck="false" autocomplete="off"
-              placeholder="Écrivez votre message…">Veni, vidi, vici.</textarea>
-          </div>
-
-          <div class="bridge">
-            <span class="bridge__line" aria-hidden="true"></span>
-            <button class="swap" id="swapBtn" type="button" title="Reprendre le résultat comme message et inverser le mode">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v15m0 0-3.5-3.5M7 19l3.5-3.5M17 20V5m0 0-3.5 3.5M17 5l3.5 3.5"/></svg>
-              <span>Inverser</span>
-            </button>
-            <span class="bridge__line" aria-hidden="true"></span>
-          </div>
-
-          <div class="field field--out">
-            <div class="field__head">
-              <span class="field__label" id="outputLabel">Message chiffré</span>
-            </div>
-            <output class="result" id="output" for="input" aria-labelledby="outputLabel"
-              data-placeholder="Le résultat apparaîtra ici."></output>
-          </div>
-
-          <div class="bench__actions">
-            <button class="btn btn--primary" id="copyBtn" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M15 9V6.5A2.5 2.5 0 0 0 12.5 4h-6A2.5 2.5 0 0 0 4 6.5v6A2.5 2.5 0 0 0 6.5 15H9"/></svg>
-              <span id="copyLabel">Copier le résultat</span>
-            </button>
-            <button class="btn" id="clearBtn" type="button">Effacer</button>
-            <p class="note">Les accents sont retirés avant le décalage&nbsp;; chiffres et ponctuation restent intacts.</p>
-          </div>
-        </div>
+    <!-- Héros -->
+    <section class="hero">
+      <div class="hero__copy">
+        <p class="prompt" data-reveal style="--d:0" aria-hidden="true">
+          <span class="prompt__user">im_me@rome</span>:~$ ./cesar --mode <b id="promptMode">chiffrer</b> --cle <b data-k>3</b><span class="caret"></span>
+        </p>
+        <h1 class="title" id="title" aria-label="Chiffre de César" data-reveal style="--d:1">
+          <span aria-hidden="true">Chiffre de</span>
+          <span aria-hidden="true"><em>César</em><i class="title__cursor">_</i></span>
+        </h1>
       </div>
 
-      <aside class="dial" aria-label="Clé de chiffrement" data-reveal style="--d:3">
+      <div class="hero__side" data-reveal style="--d:2">
+        <p class="lead">Chaque lettre avance de quelques rangs dans l'alphabet. Choisissez une clé, écrivez&nbsp;: le message se transforme sous vos yeux.</p>
+        <dl class="specs">
+          <div><dt>Opérateur</dt><dd class="tone">IM_ME</dd></div>
+          <div><dt>Algorithme</dt><dd>Substitution par décalage</dd></div>
+          <div><dt>Clé active</dt><dd><span data-k>3</span> / 25</dd></div>
+          <div><dt>Origine</dt><dd>Rome, Iᵉʳ s. av.&nbsp;J.-C.</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- Bandeau défilant -->
+    <div class="ticker" aria-hidden="true">
+      <div class="ticker__track">
+        <span>IM_ME</span><i>✦</i><span>Chiffre de César</span><i>✦</i><span>49 4D 5F 4D 45</span><i>✦</i><span>E(x) = (x + k) mod 26</span><i>✦</i><span>1M_M3</span><i>✦</i><span>ASCII 7 bits</span><i>✦</i><span>ROT-N</span><i>✦</i>
+        <span>IM_ME</span><i>✦</i><span>Chiffre de César</span><i>✦</i><span>49 4D 5F 4D 45</span><i>✦</i><span>E(x) = (x + k) mod 26</span><i>✦</i><span>1M_M3</span><i>✦</i><span>ASCII 7 bits</span><i>✦</i><span>ROT-N</span><i>✦</i>
+      </div>
+    </div>
+
+    <!-- Grille bento -->
+    <div class="bento">
+
+      <!-- 01 · Atelier -->
+      <section class="card card--bench" id="atelier" aria-labelledby="benchTitle" data-in>
+        <header class="card__head">
+          <span class="card__idx">01</span>
+          <h2 id="benchTitle">Atelier</h2>
+          <fieldset class="seg">
+            <legend class="sr-only">Mode</legend>
+            <span class="seg__pill" aria-hidden="true"></span>
+            <label class="seg__opt"><input type="radio" name="mode" value="encrypt" checked><span>Chiffrer</span></label>
+            <label class="seg__opt"><input type="radio" name="mode" value="decrypt"><span>Déchiffrer</span></label>
+          </fieldset>
+        </header>
+
+        <div class="field">
+          <div class="field__head">
+            <label class="field__label" for="input" id="inputLabel">Message clair</label>
+            <span class="field__meta" id="count">0 caractère</span>
+          </div>
+          <textarea id="input" rows="4" spellcheck="false" autocomplete="off"
+            placeholder="Écrivez votre message…">Veni, vidi, vici.</textarea>
+        </div>
+
+        <div class="bridge">
+          <span class="bridge__line" aria-hidden="true"></span>
+          <button class="swap" id="swapBtn" type="button" title="Reprendre le résultat comme message et inverser le mode">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v15m0 0-3.5-3.5M7 19l3.5-3.5M17 20V5m0 0-3.5 3.5M17 5l3.5 3.5"/></svg>
+            <span>Inverser</span>
+          </button>
+          <span class="bridge__line" aria-hidden="true"></span>
+        </div>
+
+        <div class="field field--out">
+          <div class="field__head">
+            <span class="field__label" id="outputLabel">Message chiffré</span>
+            <span class="field__meta">clé <b class="tone" data-k>3</b></span>
+          </div>
+          <output class="result" id="output" for="input" aria-labelledby="outputLabel"
+            data-placeholder="Le résultat apparaîtra ici."></output>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn--primary" id="copyBtn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M15 9V6.5A2.5 2.5 0 0 0 12.5 4h-6A2.5 2.5 0 0 0 4 6.5v6A2.5 2.5 0 0 0 6.5 15H9"/></svg>
+            <span id="copyLabel">Copier le résultat</span>
+          </button>
+          <button class="btn" id="clearBtn" type="button">Effacer</button>
+          <p class="note">Les accents sont retirés avant le décalage&nbsp;; chiffres et ponctuation restent intacts.</p>
+        </div>
+      </section>
+
+      <!-- 02 · Clé -->
+      <section class="card card--dial" aria-labelledby="dialTitle" data-in>
+        <header class="card__head">
+          <span class="card__idx">02</span>
+          <h2 id="dialTitle">Clé</h2>
+          <span class="card__tag">glisser pour tourner</span>
+        </header>
+
         <div class="dial__wheel">
           <svg id="wheel" viewBox="0 0 400 400" tabindex="0" role="slider"
             aria-label="Roue de chiffrement, clé" aria-valuemin="1" aria-valuemax="25" aria-valuenow="3"></svg>
           <div class="dial__hub" aria-hidden="true">
             <span class="dial__hub-label">Clé</span>
-            <span class="dial__hub-num" id="hubNum">3</span>
+            <span class="dial__hub-num" id="hubNum" data-k>3</span>
           </div>
         </div>
 
@@ -138,33 +147,89 @@
           <button class="chip" type="button" data-key="13">13 · ROT13</button>
           <button class="chip" type="button" id="randomBtn">Au hasard</button>
         </div>
-      </aside>
-    </section>
+      </section>
 
-    <section class="band" aria-labelledby="tableTitle">
-      <header class="band__head">
-        <h2 id="tableTitle">Table de correspondance</h2>
-        <p>Ligne du haut&nbsp;: l'alphabet clair. Ligne du bas&nbsp;: ce qu'il devient.</p>
-      </header>
-      <div class="strip" id="strip" role="img" aria-label="Table de correspondance entre l'alphabet clair et l'alphabet chiffré"></div>
-      <p class="formula">
-        <span><i>E</i>(<i>x</i>) = (<i>x</i> + <b class="k">3</b>) mod 26</span>
-        <span><i>D</i>(<i>x</i>) = (<i>x</i> − <b class="k">3</b>) mod 26</span>
-      </p>
-    </section>
+      <!-- 03 · Signature -->
+      <section class="card card--sig" aria-labelledby="sigTitle" data-in>
+        <header class="card__head">
+          <span class="card__idx">03</span>
+          <h2 id="sigTitle">Opérateur</h2>
+          <span class="card__tag">whoami</span>
+        </header>
 
-    <section class="band" aria-labelledby="crackTitle">
-      <header class="band__head">
-        <h2 id="crackTitle">Casser le code</h2>
-        <p>Vingt-cinq clés seulement&nbsp;: il suffit de toutes les essayer. La plus vraisemblable est repérée par la fréquence des lettres en français.</p>
-      </header>
-      <p class="crack__empty" id="crackEmpty" hidden>Écrivez un message pour voir ses 25 déchiffrements possibles.</p>
-      <ol class="crack" id="crack"></ol>
-    </section>
+        <pre class="sig__art" id="sigArt" aria-hidden="true"></pre>
+        <p class="sr-only">IM_ME</p>
+
+        <dl class="sig__list">
+          <div><dt>leet</dt><dd>1M_M3</dd></div>
+          <div><dt>césar +<span data-k>3</span></dt><dd class="tone" id="sigCaesar">LP_PH</dd></div>
+          <div><dt>ascii</dt><dd>73 77 95 77 69</dd></div>
+          <div><dt>hex</dt><dd>49 4D 5F 4D 45</dd></div>
+          <div><dt>bin</dt><dd class="sig__bin">01001001 01001101 01011111 01001101 01000101</dd></div>
+        </dl>
+      </section>
+
+      <!-- 04 · Correspondance -->
+      <section class="card card--map" aria-labelledby="mapTitle" data-in>
+        <header class="card__head">
+          <span class="card__idx">04</span>
+          <h2 id="mapTitle">Correspondance</h2>
+          <span class="card__tag">clair → chiffré</span>
+        </header>
+
+        <div class="strip" id="strip" role="img" aria-label="Table de correspondance entre l'alphabet clair et l'alphabet chiffré"></div>
+
+        <div class="formulas">
+          <p class="formula"><span class="formula__tag">Chiffrer</span><span><i>E</i>(<i>x</i>) = (<i>x</i> + <b data-k>3</b>) mod 26</span></p>
+          <p class="formula"><span class="formula__tag">Déchiffrer</span><span><i>D</i>(<i>x</i>) = (<i>x</i> − <b data-k>3</b>) mod 26</span></p>
+        </div>
+      </section>
+
+      <!-- 05 · Table ASCII -->
+      <section class="card card--ascii" aria-labelledby="asciiTitle" data-in>
+        <header class="card__head">
+          <span class="card__idx">05</span>
+          <h2 id="asciiTitle">Table ASCII</h2>
+          <span class="card__tag">128 codes · 7 bits</span>
+        </header>
+
+        <div class="ascii__top">
+          <div class="inspect" aria-live="polite">
+            <span class="inspect__glyph" id="insGlyph">A</span>
+            <dl class="inspect__list">
+              <div><dt>Déc</dt><dd id="insDec">65</dd></div>
+              <div><dt>Hex</dt><dd id="insHex">0x41</dd></div>
+              <div><dt>Oct</dt><dd id="insOct">101</dd></div>
+              <div><dt>Bin</dt><dd id="insBin">0100 0001</dd></div>
+              <div class="inspect__wide"><dt>Type</dt><dd id="insKind">Lettre majuscule</dd></div>
+              <div class="inspect__wide"><dt>César</dt><dd id="insCaesar" class="tone">A → D</dd></div>
+            </dl>
+          </div>
+
+          <div class="ascii__tools">
+            <div class="filters" role="group" aria-label="Filtrer la table">
+              <button class="chip" type="button" data-filter="all" aria-pressed="true">Tout</button>
+              <button class="chip" type="button" data-filter="upper" aria-pressed="false">Majuscules</button>
+              <button class="chip" type="button" data-filter="lower" aria-pressed="false">Minuscules</button>
+              <button class="chip" type="button" data-filter="digit" aria-pressed="false">Chiffres</button>
+              <button class="chip" type="button" data-filter="symbol" aria-pressed="false">Symboles</button>
+              <button class="chip" type="button" data-filter="ctrl" aria-pressed="false">Contrôle</button>
+            </div>
+            <p class="legend">
+              <span><i class="legend__src"></i>dans votre message</span>
+              <span><i class="legend__out"></i>dans le résultat</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="ascii" id="ascii" role="group" aria-label="Les 128 caractères ASCII"></div>
+      </section>
+    </div>
   </main>
 
   <footer class="foot">
-    <p>Le chiffre de César n'offre aucune sécurité réelle — c'est un objet d'étude, pas un coffre-fort.</p>
+    <p>Conçu et chiffré par <span class="glitch" data-text="IM_ME">IM_ME</span></p>
+    <p>Le chiffre de César n'offre aucune sécurité réelle — c'est un objet d'étude.</p>
   </footer>
 
   <script src="script.js"></script>
